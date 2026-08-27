@@ -187,6 +187,43 @@ say "Installing modem73 package into the SDK tree"
 rm -rf package/modem73
 cp -r "${HERE}/modem73" package/modem73
 
+# ------------------------------------------------------- missing base pkgs --
+# The SDK ships a TRIMMED copy of the base package tree. Two packages modem73
+# needs are absent: libs/ncurses (which also provides the libtinfo.a stub that
+# upstream's '-ltinfo' resolves against) and libs/libusb (required by hidapi
+# for CM108 PTT). They are not in any feed either, so recover them from
+# openwrt.git at the matching release tag.
+say "Checking for base packages the SDK omits"
+
+MISSING_BASE=""
+for p in package/libs/ncurses package/libs/libusb; do
+	[ -d "$p" ] || MISSING_BASE="$MISSING_BASE $p"
+done
+
+if [ -n "$MISSING_BASE" ]; then
+	warn "SDK is missing:${MISSING_BASE}"
+	say "Fetching them from openwrt.git v${RELEASE}"
+
+	rm -rf "${WORK}/openwrt-base"
+	git clone --depth 1 --branch "v${RELEASE}" --filter=blob:none --sparse \
+		https://github.com/openwrt/openwrt.git "${WORK}/openwrt-base" >/dev/null 2>&1 \
+		|| die "Could not clone openwrt.git to recover the missing base packages."
+
+	# shellcheck disable=SC2086
+	( cd "${WORK}/openwrt-base" && git sparse-checkout set $MISSING_BASE ) >/dev/null 2>&1 \
+		|| die "sparse-checkout of the missing base packages failed."
+
+	for p in $MISSING_BASE; do
+		[ -d "${WORK}/openwrt-base/$p" ] \
+			|| die "$p is not present in openwrt.git v${RELEASE}."
+		mkdir -p "$(dirname "$p")"
+		cp -r "${WORK}/openwrt-base/$p" "$(dirname "$p")/"
+		say "  added $p"
+	done
+else
+	say "All required base packages already present"
+fi
+
 say "Updating package feed"
 # Only the 'packages' feed is needed: alsa-lib, hidapi, hamlib and
 # libudev-zero all live there. libusb-1.0 is in the base tree. Skipping

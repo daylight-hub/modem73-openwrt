@@ -1,0 +1,45 @@
+name: Build modem73 for OpenWrt (Pi 4B)
+
+# Runs on GitHub's free x86_64 runners, which is what the OpenWrt SDK needs.
+# Trigger it by hand from the Actions tab, then download the artifact.
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main, master ]
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Confirm runner architecture
+        run: |
+          uname -m
+          test "$(uname -m)" = "x86_64" || { echo "Need an x86_64 runner"; exit 1; }
+
+      - name: Install SDK host dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential clang flex bison g++ gawk gettext git \
+            libncurses-dev libssl-dev python3-setuptools rsync swig \
+            unzip zlib1g-dev file wget zstd
+
+      - name: Build package
+        run: |
+          chmod +x build.sh
+          ./build.sh
+
+      - name: Show what was produced
+        run: ls -la out/
+
+      - name: Upload .ipk artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: modem73-openwrt-aarch64_cortex-a72
+          path: out/*.ipk
+          if-no-files-found: error
+          retention-days: 30

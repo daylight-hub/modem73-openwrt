@@ -1,0 +1,88 @@
+#!/bin/sh /etc/rc.common
+
+# modem73 - OFDM/ROBUST/MFSK software modem
+USE_PROCD=1
+START=95
+STOP=10
+
+PROG=/usr/bin/modem73
+
+# append_opt <section> <uci option> <cli flag> [default]
+append_opt() {
+	local sect="$1" name="$2" flag="$3" def="$4"
+	local val
+	config_get val "$sect" "$name" "$def"
+	[ -n "$val" ] && procd_append_param command "$flag" "$val"
+}
+
+# append_flag <section> <uci option> <cli flag>
+append_flag() {
+	local sect="$1" name="$2" flag="$3"
+	local val
+	config_get_bool val "$sect" "$name" 0
+	[ "$val" -eq 1 ] && procd_append_param command "$flag"
+}
+
+start_service() {
+	local enabled extra
+
+	config_load modem73
+	config_get_bool enabled main enabled 0
+
+	if [ "$enabled" -ne 1 ]; then
+		echo "modem73 is disabled in /etc/config/modem73" >&2
+		return 0
+	fi
+
+	procd_open_instance main
+	procd_set_param command "$PROG" --headless
+
+	append_opt main callsign      --callsign     N0CALL
+	append_opt main port          --port         8001
+	append_opt main bind          --bind         0.0.0.0
+	append_opt main control_port  --control-port 8073
+	append_opt main control_bind  --control-bind 127.0.0.1
+
+	append_opt main device        --device
+	append_opt main tx_level      --tx-level     100
+
+	append_opt main modem         --modem        ofdm
+	append_opt main modulation    --modulation
+	append_opt main rate          --rate
+	append_opt main robust_mode   --robust-mode
+	append_opt main mfsk_mode     --mfsk-mode
+
+	append_flag main no_mfsk_rx   --no-mfsk-rx
+	append_flag main no_robust_rx --no-robust-rx
+	append_flag main no_ofdm_rx   --no-ofdm-rx
+
+	append_opt main ptt           --ptt          none
+	append_opt main rigctl        --rigctl
+	append_opt main com_port      --com-port
+	append_opt main com_line      --com-line
+	append_opt main cm108_gpio    --cm108-gpio
+
+	append_opt main csma_mode     --csma-mode
+	append_opt main csma_band     --csma-band
+	append_opt main csma_preset   --csma-preset
+
+	config_get extra main extra_args ''
+	# shellcheck disable=SC2086
+	[ -n "$extra" ] && procd_append_param command $extra
+
+	# modem73 keeps its saved settings under $HOME/.config/modem73
+	procd_set_param env HOME=/root
+
+	# Audio I/O is latency sensitive; give it a little priority.
+	procd_set_param nice -5
+
+	procd_set_param respawn 3600 5 0
+	procd_set_param stdout 1
+	procd_set_param stderr 1
+
+	procd_close_instance
+}
+
+service_triggers() {
+	procd_add_reload_trigger "modem73"
+}

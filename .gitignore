@@ -1,0 +1,8 @@
+# The SDK download and its extracted tree land here. Several GB -- never commit.
+work/
+
+# Build artifacts
+out/
+*.ipk
+*.tar.zst
+*.tar.xz
